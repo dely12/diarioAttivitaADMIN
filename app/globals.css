@@ -1,26 +1,206 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* ============================================================
+   Design tokens — stessa palette dell'app utente (slate)
+   ============================================================ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: #f1f5f9; /* slate-100 */
+  --color-foreground: #0f172a; /* slate-900 */
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ============================================================
+   Base
+   ============================================================ */
+html {
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100dvh;
+}
+
+h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
+h2 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; }
+
+label { font-size: 0.875rem; font-weight: 500; color: #475569; }
+
+input:not([type="range"]):not([type="date"]):not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  height: 2.75rem;
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  background: white;
+  padding: 0 0.75rem;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input:not([type="range"]):not([type="date"]):not([type="checkbox"]):not([type="radio"]):focus,
+textarea:focus,
+select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 4px #dbeafe;
+}
+
+a { color: #1d4ed8; }
+a:hover { text-decoration: underline; }
+
+/* ============================================================
+   Utility classes (stesso naming gf- per coerenza)
+   ============================================================ */
+
+/* Card */
+.gf-card {
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  background: white;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.gf-card--accent {
+  border-top: 4px solid #2563eb;
+}
+
+/* Typography */
+.gf-h1 { font-size: 1.5rem; font-weight: 600; color: #0f172a; }
+.gf-h2 { font-size: 1.125rem; font-weight: 600; color: #0f172a; }
+.gf-text { font-size: 0.875rem; color: #0f172a; }
+.gf-muted { font-size: 0.75rem; color: #64748b; }
+.gf-help { font-size: 0.875rem; color: #64748b; }
+
+/* Error box */
+.gf-error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Button base */
+.gf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: background 0.15s, opacity 0.15s;
+  outline: none;
+  cursor: pointer;
+  border: none;
+}
+.gf-btn:focus-visible {
+  box-shadow: 0 0 0 4px #dbeafe;
+}
+.gf-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Skeleton shimmer */
+.gf-skeleton-block {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: #e2e8f0;
+}
+.gf-skeleton-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.4) 50%,
+    transparent 100%
+  );
+  animation: gf-shimmer 1.25s infinite;
+}
+@keyframes gf-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* ============================================================
+   Admin layout helpers
+   ============================================================ */
+
+/* Sidebar nav link */
+.admin-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #475569;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+  min-height: 40px;
+}
+.admin-nav-link:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  text-decoration: none;
+}
+.admin-nav-link.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.badge-pending  { background: #fef9c3; color: #854d0e; }
+.badge-approved { background: #dcfce7; color: #166534; }
+.badge-rejected { background: #fee2e2; color: #991b1b; }
+.badge-cancelled{ background: #f1f5f9; color: #64748b; }
+
+/* Table */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.admin-table th {
+  text-align: left;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+.admin-table td {
+  padding: 0.75rem 0.875rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+.admin-table tbody tr:hover td {
+  background: #f8fafc;
 }
