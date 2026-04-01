@@ -109,6 +109,85 @@ function hhmm2min(s: string): number {
   return h * 60 + m;
 }
 
+// ── UI helpers ───────────────────────────────────────────────────────────────
+
+function renderAdminWorkflowStatus(group: DipGroup) {
+  const { day_id, day_status } = group;
+
+  if (!day_id) {
+    return (
+      <span className="inline-flex h-7 items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-500">
+        Vuota
+      </span>
+    );
+  }
+
+  if (day_status === "OPEN") {
+    return (
+      <span className="inline-flex h-7 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-700">
+        Bozza
+      </span>
+    );
+  }
+
+  if (day_status === "SUBMITTED") {
+    return (
+      <span className="inline-flex h-7 items-center rounded-full px-3 text-xs font-medium bg-blue-100 text-blue-800">
+        Confermata utente
+      </span>
+    );
+  }
+
+  if (day_status === "LOCKED") {
+    return (
+      <span className="inline-flex h-7 items-center rounded-full border border-slate-300 bg-slate-100 px-3 text-xs font-medium text-slate-700">
+        Chiusa utente
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex h-7 items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-500">
+      —
+    </span>
+  );
+}
+
+function SummaryCell({
+  label,
+  value,
+  tone = "neutral",
+  alert = false,
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "green" | "amber" | "blue" | "red";
+  alert?: boolean;
+}) {
+  const tones = {
+    neutral: "border-slate-200 bg-slate-50 text-slate-600",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    red: "border-red-300 bg-red-50 text-red-700",
+  };
+
+  return (
+   <div className="min-w-[96px] rounded border bg-slate-50 px-2.5 py-1.5 border-slate-200">
+  <div className="text-[9px] uppercase text-slate-400">{label}</div>
+  <div className={`mt-0.5 text-sm font-semibold ${
+    tone === "green" ? "text-emerald-600" :
+    tone === "amber" ? "text-amber-600" :
+    tone === "blue" ? "text-blue-600" :
+    tone === "red" ? "text-red-600" :
+    "text-slate-700"
+  }`}>
+    {value}
+  </div>
+</div>
+  );
+}
+
 // ── EntryForm ────────────────────────────────────────────────────────────────
 
 function EntryForm({
@@ -137,9 +216,15 @@ function EntryForm({
   const [pending, startTransition] = useTransition();
 
   function handleSave() {
-    if (!codattivita) { setError("Seleziona un'attività."); return; }
+    if (!codattivita) {
+      setError("Seleziona un'attività.");
+      return;
+    }
     const minutes = hhmm2min(timeInput);
-    if (minutes <= 0) { setError("Inserire un orario valido (es. 08:00)."); return; }
+    if (minutes <= 0) {
+      setError("Inserire un orario valido (es. 08:00).");
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const result = await onSave(codattivita, codcommessa, minutes);
@@ -243,14 +328,6 @@ function DipGroupRow({
 
   const { total_minutes, activity_minutes, absence_minutes, day_status, entries, day_id } = group;
   const hasEntries = entries.length > 0;
-  // Status badge
-  const statusBadge =
-    day_status === "LOCKED" ? (
-      <span className="badge badge-approved text-xs">Confermato</span>
-    ) : day_status === "OPEN" ? (
-      <span className="badge badge-pending text-xs">In comp.</span>
-    ) : null;
-
 
   function handleDelete(entry_id: string, d_id: string) {
     setDeleteError(null);
@@ -283,80 +360,122 @@ function DipGroupRow({
 
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
-      {/* ── Header ── */}
+      {/* Header cliccabile */}
       <div
-        className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-slate-50 select-none"
+        className="px-3 py-2 cursor-pointer hover:bg-slate-50 select-none"
         onClick={onToggle}
       >
-        <span className="text-slate-400 flex-shrink-0">
-          {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </span>
-
-        <span className="font-medium text-slate-800 text-sm flex-1 min-w-0 truncate">
-          {group.dipendente}
-        </span>
-
-        {/* Time breakdown badges */}
-        {!hasEntries ? (
-          <span className="text-xs text-slate-400 italic flex-shrink-0">Non compilato!!</span>
-        ) : (
-          <span className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-            {activity_minutes > 0 && (
-              <span className="inline-flex items-center text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                {fmtMin(activity_minutes)} attività
-              </span>
-            )}
-            {absence_minutes > 0 && (
-              <span className="inline-flex items-center text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                {fmtMin(absence_minutes)} assenza
-              </span>
-            )}
-            {total_minutes < 480 && (
-              <span className="inline-flex items-center text-xs font-semibold bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                −{fmtMin(480 - total_minutes)}
-              </span>
-            )}
-            {total_minutes > 480 && (
-              <span className="inline-flex items-center text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                +{fmtMin(total_minutes - 480)} straordinario
-              </span>
-            )}
+        {/* Mobile / tablet */}
+        <div className="flex lg:hidden items-center gap-3">
+          <span className="text-slate-400 flex-shrink-0">
+            {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
           </span>
-        )}
 
-        {statusBadge && (
-          <span className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-            {statusBadge}
+          <span className="font-medium text-slate-800 text-sm flex-1 min-w-0 truncate">
+            {group.dipendente}
           </span>
-        )}
 
-        {/* Lock button — only for OPEN days with entries */}
-        {day_status === "OPEN" && hasEntries && (
+          <div className="flex items-center gap-2 shrink-0">
+            <SummaryCell
+              label="ATT"
+              value={activity_minutes > 0 ? fmtMin(activity_minutes) : "—"}
+              tone="green"
+            />
+            <SummaryCell
+              label="MANC"
+              value={total_minutes < 480 ? `-${fmtMin(480 - total_minutes)}` : "—"}
+              tone={total_minutes < 480 ? "red" : "neutral"}
+              alert={total_minutes < 480}
+            />
+          </div>
+
           <button
-            onClick={(e) => { e.stopPropagation(); handleLock(); }}
-            disabled={lockPending}
-            className="gf-btn h-7 px-2 text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 flex-shrink-0"
-            title="Blocca giornata"
+            onClick={(e) => {
+              e.stopPropagation();
+              setAddOpen(true);
+              if (!isExpanded) onToggle();
+            }}
+            className="gf-btn h-8 px-3 text-xs bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+            title="Aggiungi attività"
           >
-            <Lock size={12} />
+            <Plus size={12} />
+            <span className="ml-1 hidden sm:inline">Aggiungi</span>
           </button>
-        )}
+        </div>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setAddOpen(true);
-            if (!isExpanded) onToggle();
-          }}
-          className="gf-btn h-7 px-2 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 flex-shrink-0 ml-1"
-          title="Aggiungi attività"
-        >
-          <Plus size={12} />
-          <span className="hidden sm:inline">Aggiungi</span>
-        </button>
+        {/* Desktop */}
+        <div className="hidden lg:grid grid-cols-[minmax(220px,1fr)_96px_96px_96px_96px_160px_220px] items-center gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-slate-400 flex-shrink-0">
+              {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+            </span>
+
+            <span className="font-medium text-slate-800 text-sm truncate">
+              {group.dipendente}
+            </span>
+          </div>
+
+          <SummaryCell
+            label="Attività"
+            value={activity_minutes > 0 ? fmtMin(activity_minutes) : "—"}
+            tone="green"
+          />
+          <SummaryCell
+            label="Assenza"
+            value={absence_minutes > 0 ? fmtMin(absence_minutes) : "—"}
+            tone="amber"
+          />
+          <SummaryCell
+            label="Straordinario"
+            value={total_minutes > 480 ? `+${fmtMin(total_minutes - 480)}` : "—"}
+            tone="blue"
+          />
+          <SummaryCell
+            label="Mancante"
+            value={total_minutes < 480 ? `-${fmtMin(480 - total_minutes)}` : "—"}
+            tone={total_minutes < 480 ? "red" : "neutral"}
+            alert={total_minutes < 480}
+          />
+
+          <div className="flex items-center">
+            {renderAdminWorkflowStatus(group)}
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            {(day_status === "OPEN" || day_status === "SUBMITTED") && hasEntries ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLock();
+                }}
+                disabled={lockPending}
+                className="gf-btn h-8 px-3 text-xs bg-gray-200 border border-slate-300 text-slate-700 hover:bg-slate-100"
+                title="Chiudi la giornata per l’utente"
+              >
+                <Lock size={12} />
+                <span className="ml-1">{lockPending ? "..." : "Blocca"}</span>
+              </button>
+            ) : (
+              <div className="w-30 h-8" />
+            )}
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setAddOpen(true);
+                if (!isExpanded) onToggle();
+              }}
+              className="gf-btn h-8 px-3 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 whitespace-nowrap"
+              title="Aggiungi attività"
+            >
+              <Plus size={12} />
+              <span className="ml-1">Aggiungi</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* ── Expanded body ── */}
+      {/* Expanded body */}
       {isExpanded && (
         <div className="border-t border-slate-100">
           {(deleteError || lockError) && (
@@ -491,6 +610,16 @@ function DaySection({
         )}
       </div>
 
+      <div className="hidden lg:grid grid-cols-[minmax(220px,1fr)_96px_96px_96px_96px_160px_220px] gap-2 px-3 mb-2">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Dipendente</div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400"></div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400"></div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400"></div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400"></div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Stato utente</div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400 text-right">Azioni</div>
+      </div>
+
       <div className="flex flex-col gap-2">
         {day.dipendenti.map((group) => {
           const key = `${day.date}:${group.user_id}`;
@@ -539,7 +668,8 @@ export function RegistroClient({
   function toggleGroup(key: string) {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
@@ -553,16 +683,14 @@ export function RegistroClient({
 
   return (
     <>
-      {/* Toast */}
       {toast && (
         <div className="fixed top-4 right-4 z-50 gf-card bg-emerald-50 border-emerald-200 text-emerald-800 text-sm shadow-lg px-4 py-3">
           {toast}
         </div>
       )}
 
-      {/* ── Navigation bar ── */}
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        {/* Prev buttons */}
+      <div className="sticky top-0 z-30 -mx-4 mb-6 border-b border-slate-200 bg-slate-100/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-slate-100/80">
+  <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
           <button
             onClick={() => navigate(-7)}
@@ -580,7 +708,6 @@ export function RegistroClient({
           </button>
         </div>
 
-        {/* Date label + picker */}
         <div className="flex-1 flex items-center justify-center gap-1.5 min-w-35">
           <span className="text-sm font-semibold text-slate-700 hidden md:inline">
             {weekRange(fromDate)}
@@ -604,7 +731,6 @@ export function RegistroClient({
           />
         </div>
 
-        {/* Next buttons */}
         <div className="flex items-center gap-1">
           <button
             onClick={() => navigate(1)}
@@ -621,8 +747,7 @@ export function RegistroClient({
             <ChevronsRight size={16} />
           </button>
         </div>
-
-        {/* Expand / collapse all */}
+ 
         <button
           onClick={() =>
             allExpanded
@@ -635,10 +760,7 @@ export function RegistroClient({
           {allExpanded ? "Comprimi tutto" : "Espandi tutto"}
         </button>
       </div>
-
-      {/* ── Days ──
-          Desktop: all 7 visible in scroll
-          Mobile:  only days[0] (= fromDate), navigation advances day-by-day  */}
+ </div>
       {days.map((day, i) => (
         <div key={day.date} className={i > 0 ? "hidden md:block" : ""}>
           <DaySection
