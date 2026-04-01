@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/lib/useToast";
 import { approveTimeOffGroup, rejectTimeOffGroup, cancelTimeOffGroup } from "./actions";
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, Ban, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -131,8 +132,8 @@ function ActionDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="gf-card w-full max-w-md shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="gf-card w-full max-w-md shadow-xl max-h-[90dvh] overflow-y-auto">
         <h2 className="gf-h2 mb-1">{cfg.title}</h2>
         <p className="gf-help mb-4">
           Dipendente: <strong>{group.dipendente}</strong> &mdash;{" "}
@@ -390,8 +391,8 @@ export function FerieClient({
   const router = useRouter();
   const [filterStatus, setFilterStatus]     = useState<StatusFilter>("PENDING");
   const [filterDip, setFilterDip]           = useState<string>("ALL");
-  const [dialog, setDialog]                 = useState<{ group: Group; action: DialogAction } | null>(null);
-  const [toast, setToast]                   = useState<string | null>(null);
+  const [dialog, setDialog] = useState<{ group: Group; action: DialogAction } | null>(null);
+  const { toast, showToast } = useToast();
 
   function goToMonth(ym: string) {
     router.push(`/ferie?m=${ym}`);
@@ -400,11 +401,6 @@ export function FerieClient({
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const isCurrentMonth = currentMonth === thisMonth;
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
-  }
 
   // Dipendenti unici per il filtro
   const dipendenti = useMemo(

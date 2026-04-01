@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { createAttivita, updateAttivita, deleteAttivita } from "./actions";
 import type { ActionResult } from "./actions";
+import { useToast } from "@/lib/useToast";
 
 // ============================================================
 // Tipi
@@ -60,8 +61,8 @@ function AttivitaDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 overflow-y-auto">
-      <div className="gf-card w-full max-w-md shadow-xl my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="gf-card w-full max-w-md shadow-xl max-h-[90dvh] overflow-y-auto">
         <h2 className="gf-h2 mb-5">
           {isEdit ? "Modifica attività" : "Nuova attività"}
         </h2>
@@ -180,8 +181,8 @@ function DeleteDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="gf-card w-full max-w-sm shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="gf-card w-full max-w-sm shadow-xl max-h-[90dvh] overflow-y-auto">
         <h2 className="gf-h2 mb-2">Elimina attività</h2>
         <p className="gf-help mb-1">
           Stai per eliminare <strong>{item.codattivita}</strong>:
@@ -222,15 +223,10 @@ export function AttivitaClient({
   items: Attivita[];
   commesse: CommessaOption[];
 }) {
-  const [addOpen, setAddOpen] = useState(false);
-  const [editItem, setEditItem] = useState<Attivita | null>(null);
+  const [addOpen,    setAddOpen]    = useState(false);
+  const [editItem,   setEditItem]   = useState<Attivita | null>(null);
   const [deleteItem, setDeleteItem] = useState<Attivita | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
-  }
+  const { toast, showToast } = useToast();
 
   return (
     <>

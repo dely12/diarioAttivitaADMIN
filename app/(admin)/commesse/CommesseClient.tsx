@@ -152,8 +152,8 @@ function CommessaDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-8 overflow-y-auto">
-      <div className="gf-card w-full max-w-lg shadow-xl my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="gf-card w-full max-w-lg shadow-xl max-h-[90dvh] overflow-y-auto">
         <h2 className="gf-h2 mb-5">
           {isEdit ? "Modifica commessa" : "Nuova commessa"}
         </h2>
@@ -262,8 +262,8 @@ function DeleteDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="gf-card w-full max-w-sm shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="gf-card w-full max-w-sm shadow-xl max-h-[90dvh] overflow-y-auto">
         <h2 className="gf-h2 mb-2">Elimina commessa</h2>
         <p className="gf-help mb-1">
           Stai per eliminare <strong>{item.codcommessa}</strong>:
@@ -519,27 +519,30 @@ function CommessaCard({
 // Componente principale
 // ============================================================
 export function CommesseClient({ items }: { items: Commessa[] }) {
-  const [addOpen,     setAddOpen]     = useState(false);
-  const [editItem,    setEditItem]    = useState<Commessa | null>(null);
-  const [deleteItem,  setDeleteItem]  = useState<Commessa | null>(null);
-  const [toast,       setToast]       = useState<string | null>(null);
-  const [query,       setQuery]       = useState("");
+  const [addOpen,    setAddOpen]    = useState(false);
+  const [editItem,   setEditItem]   = useState<Commessa | null>(null);
+  const [deleteItem, setDeleteItem] = useState<Commessa | null>(null);
+  const [query,      setQuery]      = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toast, showToast } = useToast();
 
-  const filtered = query.trim()
-    ? items.filter((c) => {
-        const q = query.trim().toLowerCase();
-        return (
-          c.codcommessa.toLowerCase().includes(q) ||
-          c.descrizione.toLowerCase().includes(q) ||
-          (c.modello ?? "").toLowerCase().includes(q)
-        );
-      })
-    : items;
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
+  function handleQueryChange(val: string) {
+    setQuery(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQ(val), 300);
   }
+
+  const filtered = useMemo(() => {
+    const q = debouncedQ.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (c) =>
+        c.codcommessa.toLowerCase().includes(q) ||
+        c.descrizione.toLowerCase().includes(q) ||
+        (c.modello ?? "").toLowerCase().includes(q)
+    );
+  }, [items, debouncedQ]);
 
   return (
     <>
@@ -562,20 +565,20 @@ export function CommesseClient({ items }: { items: Commessa[] }) {
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="relative w-full md:max-w-sm">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleQueryChange(e.target.value)}
             placeholder="Cerca per codice, descrizione, modello…"
             className="pl-9 h-9 text-sm"
           />
         </div>
         <button
           onClick={() => setAddOpen(true)}
-          className="gf-btn h-9 px-4 bg-blue-600 text-white hover:bg-blue-700 text-sm ml-auto"
+          className="gf-btn h-9 px-4 bg-blue-600 text-white hover:bg-blue-700 text-sm md:ml-auto"
         >
           <Plus size={16} />
           Aggiungi commessa
@@ -586,7 +589,7 @@ export function CommesseClient({ items }: { items: Commessa[] }) {
       <div className="gf-card p-0 overflow-hidden hidden md:block">
         {filtered.length === 0 ? (
           <div className="py-12 text-center gf-muted">
-            {query ? "Nessun risultato." : "Nessuna commessa."}
+            {debouncedQ ? "Nessun risultato." : "Nessuna commessa."}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -619,7 +622,7 @@ export function CommesseClient({ items }: { items: Commessa[] }) {
       <div className="md:hidden flex flex-col gap-3">
         {filtered.length === 0 ? (
           <div className="py-12 text-center gf-muted">
-            {query ? "Nessun risultato." : "Nessuna commessa."}
+            {debouncedQ ? "Nessun risultato." : "Nessuna commessa."}
           </div>
         ) : (
           filtered.map((c) => (

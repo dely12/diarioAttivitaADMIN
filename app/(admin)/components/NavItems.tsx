@@ -8,10 +8,12 @@ import {
   LayoutDashboard,
   Briefcase,
   ListChecks,
+  ClipboardList,
 } from "lucide-react";
 
 const items = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/registro", label: "Registro", icon: ClipboardList },
   { href: "/ferie", label: "Ferie", icon: PlaneTakeoff },
   { href: "/dipendenti", label: "Dipendenti", icon: Users },
   { href: "/commesse", label: "Commesse", icon: Briefcase },
