@@ -27,13 +27,20 @@ export default async function AttivitaPage() {
     );
   }
 
-  const items: Attivita[] = (attivitaData ?? []).map((r) => ({
-    codattivita: r.codattivita,
-    descrizione: r.descrizione,
-    attiva: r.attiva,
-    codcommessacorrispondente: r.codcommessacorrispondente,
-    tipoassenza: r.tipoassenza,
-  }));
+  const items: Attivita[] = (attivitaData ?? [])
+    .map((r) => ({
+      codattivita: r.codattivita,
+      descrizione: r.descrizione,
+      attiva: r.attiva,
+      codcommessacorrispondente: r.codcommessacorrispondente,
+      tipoassenza: r.tipoassenza,
+    }))
+    .sort((a, b) => {
+      const na = parseInt(a.codattivita, 10);
+      const nb = parseInt(b.codattivita, 10);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.codattivita.localeCompare(b.codattivita);
+    });
 
   const commesse: CommessaOption[] = (commesseData ?? []).map((r) => ({
     codcommessa: r.codcommessa,

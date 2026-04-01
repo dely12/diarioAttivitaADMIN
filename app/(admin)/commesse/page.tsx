@@ -7,9 +7,9 @@ export default async function CommessePage() {
   const supabase = await createClient();
 
   const { data, error } = await supabase
-    .from("commesse")
-    .select("codcommessa, descrizione, attiva")
-    .order("codcommessa", { ascending: true });
+    .from("commesse_con_ore")
+    .select("*")
+    .order("codcommessa", { ascending: false });
 
   if (error) {
     return (
@@ -21,9 +21,17 @@ export default async function CommessePage() {
   }
 
   const items: Commessa[] = (data ?? []).map((r) => ({
-    codcommessa: r.codcommessa,
-    descrizione: r.descrizione,
-    attiva: r.attiva,
+    codcommessa:       r.codcommessa!,
+    descrizione:       r.descrizione!,
+    attiva:            r.attiva,
+    qta:               r.qta,
+    modello:           r.modello,
+    capacita:          r.capacita,
+    ore_serbatoi:      r.ore_serbatoi,
+    ore_accessori:     r.ore_accessori,
+    ore_coibentazione: r.ore_coibentazione,
+    tot_ore_vendute:   r.tot_ore_vendute,
+    ore_lavorate:      r.ore_lavorate,
   }));
 
   return (

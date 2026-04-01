@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { approveTimeOffGroup, rejectTimeOffGroup, cancelTimeOffGroup } from "./actions";
-import { CheckCircle, XCircle, ChevronDown, ChevronUp, Ban } from "lucide-react";
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, Ban, ChevronLeft, ChevronRight } from "lucide-react";
 
 // ============================================================
 // Tipi
@@ -50,16 +51,6 @@ function formatMinutes(total: number) {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h${String(m).padStart(2, "0")}`;
-}
-
-function monthLabel(isoDate: string): string {
-  const [y, m] = isoDate.split("-").map(Number);
-  const label = new Intl.DateTimeFormat("it-IT", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(y, m - 1, 1)));
-  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 // ============================================================
@@ -369,11 +360,46 @@ function MobileGroupCard({
 // ============================================================
 type StatusFilter = "ALL" | "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 
-export function FerieClient({ groups }: { groups: Group[] }) {
+function prevMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
+function nextMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+}
+
+function monthTitle(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const label = new Intl.DateTimeFormat("it-IT", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(y, m - 1, 1)));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+export function FerieClient({
+  groups,
+  currentMonth,
+}: {
+  groups: Group[];
+  currentMonth: string;
+}) {
+  const router = useRouter();
   const [filterStatus, setFilterStatus]     = useState<StatusFilter>("PENDING");
   const [filterDip, setFilterDip]           = useState<string>("ALL");
   const [dialog, setDialog]                 = useState<{ group: Group; action: DialogAction } | null>(null);
   const [toast, setToast]                   = useState<string | null>(null);
+
+  function goToMonth(ym: string) {
+    router.push(`/ferie?m=${ym}`);
+  }
+
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const isCurrentMonth = currentMonth === thisMonth;
 
   function showToast(msg: string) {
     setToast(msg);
@@ -395,21 +421,12 @@ export function FerieClient({ groups }: { groups: Group[] }) {
     });
   }, [groups, filterStatus, filterDip]);
 
-  // Raggruppa per mese (basato sulla prima request_date del gruppo)
-  const byMonth = useMemo(() => {
-    const sorted = [...filtered].sort((a, b) => {
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
       const ka = a.requests[0]?.request_date ?? a.created_at;
       const kb = b.requests[0]?.request_date ?? b.created_at;
-      return kb.localeCompare(ka); // più recente prima
+      return kb.localeCompare(ka);
     });
-
-    const map = new Map<string, Group[]>();
-    for (const g of sorted) {
-      const key = (g.requests[0]?.request_date ?? g.created_at).slice(0, 7); // "YYYY-MM"
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(g);
-    }
-    return [...map.entries()].map(([key, gs]) => ({ key, label: monthLabel(key + "-01"), groups: gs }));
   }, [filtered]);
 
   const pendingCount = groups.filter((g) => g.status === "PENDING").length;
@@ -440,6 +457,34 @@ export function FerieClient({ groups }: { groups: Group[] }) {
           onDone={showToast}
         />
       )}
+
+      {/* ── Navigazione mese ────────────────────────────────── */}
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => goToMonth(prevMonth(currentMonth))}
+          className="gf-btn h-9 w-9 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          title="Mese precedente"
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <span className="gf-h2 min-w-40 text-center">{monthTitle(currentMonth)}</span>
+        <button
+          onClick={() => goToMonth(nextMonth(currentMonth))}
+          disabled={isCurrentMonth}
+          className="gf-btn h-9 w-9 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          title="Mese successivo"
+        >
+          <ChevronRight size={18} />
+        </button>
+        {!isCurrentMonth && (
+          <button
+            onClick={() => goToMonth(thisMonth)}
+            className="gf-btn h-8 px-3 text-sm bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 ml-1"
+          >
+            Oggi
+          </button>
+        )}
+      </div>
 
       {/* ── Filtri ──────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -482,62 +527,51 @@ export function FerieClient({ groups }: { groups: Group[] }) {
       </div>
 
       {/* ── Nessun risultato ────────────────────────────────── */}
-      {filtered.length === 0 && (
+      {sorted.length === 0 && (
         <div className="gf-card py-12 text-center gf-muted">Nessuna richiesta.</div>
       )}
 
-      {/* ── Sezioni per mese ────────────────────────────────── */}
-      {byMonth.map(({ key, label, groups: monthGroups }) => (
-        <div key={key} className="mb-8">
-          {/* Header mese */}
-          <div className="flex items-center gap-3 mb-3">
-            <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-              {label}
-            </h3>
-            <span className="text-xs text-slate-400">
-              {monthGroups.length} richiesta{monthGroups.length !== 1 ? "e" : ""}
-            </span>
-          </div>
-
-          {/* Desktop: tabella */}
-          <div className="gf-card p-0 overflow-hidden hidden md:block">
-            <div className="overflow-x-auto">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Dipendente</th>
-                    <th>Periodo</th>
-                    <th>Giorni</th>
-                    <th>Stato</th>
-                    <th>Richiesta il</th>
-                    <th className="text-right">Azioni</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {monthGroups.map((g) => (
-                    <GroupRow
-                      key={g.request_group_id}
-                      group={g}
-                      onAction={(group, action) => setDialog({ group, action })}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Mobile: card list */}
-          <div className="md:hidden flex flex-col gap-3">
-            {monthGroups.map((g) => (
-              <MobileGroupCard
-                key={g.request_group_id}
-                group={g}
-                onAction={(group, action) => setDialog({ group, action })}
-              />
-            ))}
+      {/* ── Desktop: tabella ────────────────────────────────── */}
+      {sorted.length > 0 && (
+        <div className="gf-card p-0 overflow-hidden hidden md:block">
+          <div className="overflow-x-auto">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Dipendente</th>
+                  <th>Periodo</th>
+                  <th>Giorni</th>
+                  <th>Stato</th>
+                  <th>Richiesta il</th>
+                  <th className="text-right">Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((g) => (
+                  <GroupRow
+                    key={g.request_group_id}
+                    group={g}
+                    onAction={(group, action) => setDialog({ group, action })}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      ))}
+      )}
+
+      {/* ── Mobile: card list ───────────────────────────────── */}
+      {sorted.length > 0 && (
+        <div className="md:hidden flex flex-col gap-3">
+          {sorted.map((g) => (
+            <MobileGroupCard
+              key={g.request_group_id}
+              group={g}
+              onAction={(group, action) => setDialog({ group, action })}
+            />
+          ))}
+        </div>
+      )}
     </>
   );
 }
