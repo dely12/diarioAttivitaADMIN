@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { approveTimeOffGroup, rejectTimeOffGroup } from "./actions";
-import { CheckCircle, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useTransition, useMemo } from "react";
+import { approveTimeOffGroup, rejectTimeOffGroup, cancelTimeOffGroup } from "./actions";
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, Ban } from "lucide-react";
 
 // ============================================================
 // Tipi
@@ -22,36 +22,18 @@ export type Group = {
   user_id: string;
   dipendente: string;
   email: string;
-  status: string; // status del gruppo (tutti uguale)
+  status: string;
   created_at: string;
   decided_at: string | null;
   note_admin: string | null;
   requests: Request[];
 };
 
-// ============================================================
-// Badge status
-// ============================================================
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    PENDING: "badge badge-pending",
-    APPROVED: "badge badge-approved",
-    REJECTED: "badge badge-rejected",
-    CANCELLED: "badge badge-cancelled",
-  };
-  const labels: Record<string, string> = {
-    PENDING: "In attesa",
-    APPROVED: "Approvata",
-    REJECTED: "Rifiutata",
-    CANCELLED: "Annullata",
-  };
-  return (
-    <span className={map[status] ?? "badge badge-cancelled"}>
-      {labels[status] ?? status}
-    </span>
-  );
-}
+type DialogAction = "APPROVE" | "REJECT" | "CANCEL";
 
+// ============================================================
+// Helpers
+// ============================================================
 function formatIT(dateIso: string) {
   const [y, m, d] = dateIso.split("-").map(Number);
   return new Intl.DateTimeFormat("it-IT", {
@@ -70,6 +52,39 @@ function formatMinutes(total: number) {
   return `${h}h${String(m).padStart(2, "0")}`;
 }
 
+function monthLabel(isoDate: string): string {
+  const [y, m] = isoDate.split("-").map(Number);
+  const label = new Intl.DateTimeFormat("it-IT", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(y, m - 1, 1)));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+// ============================================================
+// Badge status
+// ============================================================
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    PENDING:   "badge badge-pending",
+    APPROVED:  "badge badge-approved",
+    REJECTED:  "badge badge-rejected",
+    CANCELLED: "badge badge-cancelled",
+  };
+  const labels: Record<string, string> = {
+    PENDING:   "In attesa",
+    APPROVED:  "Approvata",
+    REJECTED:  "Rifiutata",
+    CANCELLED: "Annullata",
+  };
+  return (
+    <span className={map[status] ?? "badge badge-cancelled"}>
+      {labels[status] ?? status}
+    </span>
+  );
+}
+
 // ============================================================
 // Dialog conferma azione
 // ============================================================
@@ -80,7 +95,7 @@ function ActionDialog({
   onDone,
 }: {
   group: Group;
-  action: "APPROVE" | "REJECT";
+  action: DialogAction;
   onClose: () => void;
   onDone: (msg: string) => void;
 }) {
@@ -88,34 +103,56 @@ function ActionDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const isApprove = action === "APPROVE";
+  const cfg = {
+    APPROVE: {
+      title: "Approva richiesta",
+      btnClass: "bg-emerald-600 hover:bg-emerald-700",
+      btnLabel: "Conferma approvazione",
+      placeholder: "Es. Approvata, buone vacanze!",
+    },
+    REJECT: {
+      title: "Rifiuta richiesta",
+      btnClass: "bg-red-600 hover:bg-red-700",
+      btnLabel: "Conferma rifiuto",
+      placeholder: "Es. Periodo non disponibile, contattaci per concordare le date.",
+    },
+    CANCEL: {
+      title: "Annulla richiesta approvata",
+      btnClass: "bg-amber-600 hover:bg-amber-700",
+      btnLabel: "Conferma annullamento",
+      placeholder: "Es. Modifica organizzativa dell'ultimo momento.",
+    },
+  }[action];
 
   function handleSubmit() {
     setError(null);
     startTransition(async () => {
-      const result = isApprove
-        ? await approveTimeOffGroup(group.request_group_id, note)
-        : await rejectTimeOffGroup(group.request_group_id, note);
+      const result =
+        action === "APPROVE"
+          ? await approveTimeOffGroup(group.request_group_id, note)
+          : action === "REJECT"
+          ? await rejectTimeOffGroup(group.request_group_id, note)
+          : await cancelTimeOffGroup(group.request_group_id, note);
 
-      if (result.ok) {
-        onDone(result.message);
-        onClose();
-      } else {
-        setError(result.error);
-      }
+      if (result.ok) { onDone(result.message); onClose(); }
+      else setError(result.error);
     });
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="gf-card w-full max-w-md shadow-xl">
-        <h2 className="gf-h2 mb-1">
-          {isApprove ? "Approva richiesta" : "Rifiuta richiesta"}
-        </h2>
+        <h2 className="gf-h2 mb-1">{cfg.title}</h2>
         <p className="gf-help mb-4">
           Dipendente: <strong>{group.dipendente}</strong> &mdash;{" "}
           {group.requests.length} giorn{group.requests.length === 1 ? "o" : "i"}
         </p>
+
+        {action === "CANCEL" && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+            Il dipendente riceverà una notifica e potrà richiedere nuovamente le ferie per questo periodo.
+          </div>
+        )}
 
         {error && <div className="gf-error mb-4">{error}</div>}
 
@@ -128,11 +165,7 @@ function ActionDialog({
             id="note-admin"
             rows={3}
             className="h-auto py-2 resize-none"
-            placeholder={
-              isApprove
-                ? "Es. Approvata, buone vacanze!"
-                : "Es. Periodo non disponibile, contattaci per concordare le date."
-            }
+            placeholder={cfg.placeholder}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
@@ -149,17 +182,9 @@ function ActionDialog({
           <button
             onClick={handleSubmit}
             disabled={pending}
-            className={`gf-btn h-9 px-4 text-white text-sm ${
-              isApprove
-                ? "bg-emerald-600 hover:bg-emerald-700"
-                : "bg-red-600 hover:bg-red-700"
-            }`}
+            className={`gf-btn h-9 px-4 text-white text-sm ${cfg.btnClass}`}
           >
-            {pending
-              ? "Salvataggio…"
-              : isApprove
-              ? "Conferma approvazione"
-              : "Conferma rifiuto"}
+            {pending ? "Salvataggio…" : cfg.btnLabel}
           </button>
         </div>
       </div>
@@ -168,18 +193,23 @@ function ActionDialog({
 }
 
 // ============================================================
-// Riga gruppo espandibile
+// Riga gruppo espandibile (desktop)
 // ============================================================
-function GroupRow({ group, onAction }: { group: Group; onAction: (g: Group, a: "APPROVE" | "REJECT") => void }) {
+function GroupRow({
+  group,
+  onAction,
+}: {
+  group: Group;
+  onAction: (g: Group, a: DialogAction) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const isPending = group.status === "PENDING";
+  const isPending  = group.status === "PENDING";
+  const isApproved = group.status === "APPROVED";
 
   const dateFrom = group.requests[0]?.request_date ?? "";
-  const dateTo = group.requests[group.requests.length - 1]?.request_date ?? "";
+  const dateTo   = group.requests[group.requests.length - 1]?.request_date ?? "";
   const periodLabel =
-    dateFrom === dateTo
-      ? formatIT(dateFrom)
-      : `${formatIT(dateFrom)} – ${formatIT(dateTo)}`;
+    dateFrom === dateTo ? formatIT(dateFrom) : `${formatIT(dateFrom)} – ${formatIT(dateTo)}`;
 
   return (
     <>
@@ -190,12 +220,8 @@ function GroupRow({ group, onAction }: { group: Group; onAction: (g: Group, a: "
         </td>
         <td>{periodLabel}</td>
         <td>{group.requests.length}</td>
-        <td>
-          <StatusBadge status={group.status} />
-        </td>
-        <td className="text-slate-500 text-xs">
-          {formatIT(group.created_at.slice(0, 10))}
-        </td>
+        <td><StatusBadge status={group.status} /></td>
+        <td className="text-slate-500 text-xs">{formatIT(group.created_at.slice(0, 10))}</td>
         <td>
           <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
             {isPending && (
@@ -203,20 +229,24 @@ function GroupRow({ group, onAction }: { group: Group; onAction: (g: Group, a: "
                 <button
                   onClick={() => onAction(group, "APPROVE")}
                   className="gf-btn h-8 px-3 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                  title="Approva"
                 >
-                  <CheckCircle size={14} />
-                  Approva
+                  <CheckCircle size={14} /> Approva
                 </button>
                 <button
                   onClick={() => onAction(group, "REJECT")}
                   className="gf-btn h-8 px-3 text-xs bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
-                  title="Rifiuta"
                 >
-                  <XCircle size={14} />
-                  Rifiuta
+                  <XCircle size={14} /> Rifiuta
                 </button>
               </>
+            )}
+            {isApproved && (
+              <button
+                onClick={() => onAction(group, "CANCEL")}
+                className="gf-btn h-8 px-3 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
+              >
+                <Ban size={14} /> Annulla
+              </button>
             )}
             <button
               onClick={() => setExpanded((v) => !v)}
@@ -228,7 +258,6 @@ function GroupRow({ group, onAction }: { group: Group; onAction: (g: Group, a: "
         </td>
       </tr>
 
-      {/* Dettaglio giornate */}
       {expanded && (
         <tr>
           <td colSpan={6} className="p-0">
@@ -241,8 +270,7 @@ function GroupRow({ group, onAction }: { group: Group; onAction: (g: Group, a: "
               )}
               {group.note_admin && (
                 <div className="mb-3 text-sm text-slate-700">
-                  <span className="font-medium">Nota admin:</span>{" "}
-                  {group.note_admin}
+                  <span className="font-medium">Nota admin:</span> {group.note_admin}
                 </div>
               )}
               <table className="admin-table">
@@ -275,34 +303,124 @@ function GroupRow({ group, onAction }: { group: Group; onAction: (g: Group, a: "
 }
 
 // ============================================================
-// Filtri
+// Card mobile per singolo gruppo
 // ============================================================
-type Filter = "ALL" | "PENDING" | "APPROVED" | "REJECTED";
+function MobileGroupCard({
+  group,
+  onAction,
+}: {
+  group: Group;
+  onAction: (g: Group, a: DialogAction) => void;
+}) {
+  const isPending  = group.status === "PENDING";
+  const isApproved = group.status === "APPROVED";
+
+  const dateFrom = group.requests[0]?.request_date ?? "";
+  const dateTo   = group.requests[group.requests.length - 1]?.request_date ?? "";
+  const periodLabel =
+    dateFrom === dateTo ? formatIT(dateFrom) : `${formatIT(dateFrom)} – ${formatIT(dateTo)}`;
+
+  return (
+    <div className="gf-card">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div>
+          <div className="font-medium text-slate-900 text-sm">{group.dipendente}</div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            {periodLabel} · {group.requests.length} gg
+          </div>
+        </div>
+        <StatusBadge status={group.status} />
+      </div>
+
+      {(isPending || isApproved) && (
+        <div className="flex gap-2 mt-3">
+          {isPending && (
+            <>
+              <button
+                onClick={() => onAction(group, "APPROVE")}
+                className="gf-btn flex-1 h-9 text-sm bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+              >
+                <CheckCircle size={14} /> Approva
+              </button>
+              <button
+                onClick={() => onAction(group, "REJECT")}
+                className="gf-btn flex-1 h-9 text-sm bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+              >
+                <XCircle size={14} /> Rifiuta
+              </button>
+            </>
+          )}
+          {isApproved && (
+            <button
+              onClick={() => onAction(group, "CANCEL")}
+              className="gf-btn flex-1 h-9 text-sm bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200"
+            >
+              <Ban size={14} /> Annulla approvazione
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ============================================================
 // Componente principale
 // ============================================================
+type StatusFilter = "ALL" | "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
 export function FerieClient({ groups }: { groups: Group[] }) {
-  const [filter, setFilter] = useState<Filter>("PENDING");
-  const [dialog, setDialog] = useState<{ group: Group; action: "APPROVE" | "REJECT" } | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus]     = useState<StatusFilter>("PENDING");
+  const [filterDip, setFilterDip]           = useState<string>("ALL");
+  const [dialog, setDialog]                 = useState<{ group: Group; action: DialogAction } | null>(null);
+  const [toast, setToast]                   = useState<string | null>(null);
 
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
   }
 
-  const filters: { value: Filter; label: string }[] = [
-    { value: "ALL", label: "Tutte" },
-    { value: "PENDING", label: "In attesa" },
-    { value: "APPROVED", label: "Approvate" },
-    { value: "REJECTED", label: "Rifiutate" },
-  ];
+  // Dipendenti unici per il filtro
+  const dipendenti = useMemo(
+    () => [...new Set(groups.map((g) => g.dipendente))].sort(),
+    [groups]
+  );
 
-  const filtered =
-    filter === "ALL" ? groups : groups.filter((g) => g.status === filter);
+  // Filtra
+  const filtered = useMemo(() => {
+    return groups.filter((g) => {
+      const matchStatus = filterStatus === "ALL" || g.status === filterStatus;
+      const matchDip    = filterDip === "ALL" || g.dipendente === filterDip;
+      return matchStatus && matchDip;
+    });
+  }, [groups, filterStatus, filterDip]);
+
+  // Raggruppa per mese (basato sulla prima request_date del gruppo)
+  const byMonth = useMemo(() => {
+    const sorted = [...filtered].sort((a, b) => {
+      const ka = a.requests[0]?.request_date ?? a.created_at;
+      const kb = b.requests[0]?.request_date ?? b.created_at;
+      return kb.localeCompare(ka); // più recente prima
+    });
+
+    const map = new Map<string, Group[]>();
+    for (const g of sorted) {
+      const key = (g.requests[0]?.request_date ?? g.created_at).slice(0, 7); // "YYYY-MM"
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(g);
+    }
+    return [...map.entries()].map(([key, gs]) => ({ key, label: monthLabel(key + "-01"), groups: gs }));
+  }, [filtered]);
 
   const pendingCount = groups.filter((g) => g.status === "PENDING").length;
+
+  const statusFilters: { value: StatusFilter; label: string }[] = [
+    { value: "ALL",       label: "Tutte" },
+    { value: "PENDING",   label: "In attesa" },
+    { value: "APPROVED",  label: "Approvate" },
+    { value: "REJECTED",  label: "Rifiutate" },
+    { value: "CANCELLED", label: "Annullate" },
+  ];
 
   return (
     <>
@@ -323,36 +441,67 @@ export function FerieClient({ groups }: { groups: Group[] }) {
         />
       )}
 
-      {/* Filtri */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        {filters.map(({ value, label }) => (
-          <button
-            key={value}
-            onClick={() => setFilter(value)}
-            className={`gf-btn h-8 px-3 text-sm border ${
-              filter === value
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-            }`}
+      {/* ── Filtri ──────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        {/* Status pills */}
+        <div className="flex flex-wrap gap-2">
+          {statusFilters.map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setFilterStatus(value)}
+              className={`gf-btn h-8 px-3 text-sm border ${
+                filterStatus === value
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+              {value === "PENDING" && pendingCount > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-400 text-amber-900 text-[10px] font-bold">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Dipendente select */}
+        {dipendenti.length > 1 && (
+          <select
+            value={filterDip}
+            onChange={(e) => setFilterDip(e.target.value)}
+            className="h-8 text-sm border border-slate-200 rounded-lg px-3 bg-white text-slate-700 min-w-40"
+            style={{ height: "2rem" }}
           >
-            {label}
-            {value === "PENDING" && pendingCount > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-400 text-amber-900 text-[10px] font-bold">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-        ))}
+            <option value="ALL">Tutti i dipendenti</option>
+            {dipendenti.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {/* Tabella desktop */}
-      <div className="gf-card p-0 overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="py-12 text-center gf-muted">Nessuna richiesta.</div>
-        ) : (
-          <>
-            {/* Tabella — visibile ≥md */}
-            <div className="hidden md:block overflow-x-auto">
+      {/* ── Nessun risultato ────────────────────────────────── */}
+      {filtered.length === 0 && (
+        <div className="gf-card py-12 text-center gf-muted">Nessuna richiesta.</div>
+      )}
+
+      {/* ── Sezioni per mese ────────────────────────────────── */}
+      {byMonth.map(({ key, label, groups: monthGroups }) => (
+        <div key={key} className="mb-8">
+          {/* Header mese */}
+          <div className="flex items-center gap-3 mb-3">
+            <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
+              {label}
+            </h3>
+            <span className="text-xs text-slate-400">
+              {monthGroups.length} richiesta{monthGroups.length !== 1 ? "e" : ""}
+            </span>
+          </div>
+
+          {/* Desktop: tabella */}
+          <div className="gf-card p-0 overflow-hidden hidden md:block">
+            <div className="overflow-x-auto">
               <table className="admin-table">
                 <thead>
                   <tr>
@@ -365,7 +514,7 @@ export function FerieClient({ groups }: { groups: Group[] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((g) => (
+                  {monthGroups.map((g) => (
                     <GroupRow
                       key={g.request_group_id}
                       group={g}
@@ -375,49 +524,20 @@ export function FerieClient({ groups }: { groups: Group[] }) {
                 </tbody>
               </table>
             </div>
+          </div>
 
-            {/* Card list — visibile <md */}
-            <div className="md:hidden divide-y divide-slate-100">
-              {filtered.map((g) => {
-                const dateFrom = g.requests[0]?.request_date ?? "";
-                const dateTo = g.requests[g.requests.length - 1]?.request_date ?? "";
-                const periodLabel =
-                  dateFrom === dateTo
-                    ? formatIT(dateFrom)
-                    : `${formatIT(dateFrom)} – ${formatIT(dateTo)}`;
-
-                return (
-                  <div key={g.request_group_id} className="px-4 py-4">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div>
-                        <div className="font-medium text-slate-900 text-sm">{g.dipendente}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{periodLabel} · {g.requests.length} gg</div>
-                      </div>
-                      <StatusBadge status={g.status} />
-                    </div>
-                    {g.status === "PENDING" && (
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          onClick={() => setDialog({ group: g, action: "APPROVE" })}
-                          className="gf-btn flex-1 h-9 text-sm bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                        >
-                          <CheckCircle size={14} /> Approva
-                        </button>
-                        <button
-                          onClick={() => setDialog({ group: g, action: "REJECT" })}
-                          className="gf-btn flex-1 h-9 text-sm bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
-                        >
-                          <XCircle size={14} /> Rifiuta
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
+          {/* Mobile: card list */}
+          <div className="md:hidden flex flex-col gap-3">
+            {monthGroups.map((g) => (
+              <MobileGroupCard
+                key={g.request_group_id}
+                group={g}
+                onAction={(group, action) => setDialog({ group, action })}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </>
   );
 }

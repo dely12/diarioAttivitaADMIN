@@ -100,6 +100,67 @@ function buildApprovalHtml(args: {
   </div>`;
 }
 
+function buildCancellationHtml(args: {
+  displayName: string;
+  noteAdmin: string | null;
+  rows: Array<{
+    request_date: string;
+    codattivita: string;
+    attivita_descrizione: string;
+    minutes: number;
+  }>;
+}): string {
+  const from = args.rows[0]?.request_date ?? "";
+  const to = args.rows[args.rows.length - 1]?.request_date ?? "";
+
+  const rowsHtml = args.rows
+    .map(
+      (r) => `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb">${esc(formatIT(r.request_date))}</td>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb">${esc(r.codattivita)} - ${esc(r.attivita_descrizione)}</td>
+        <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">${esc(formatMinutes(r.minutes))}</td>
+      </tr>`
+    )
+    .join("");
+
+  return `
+  <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a">
+    <h2 style="margin:0 0 12px">Richiesta ferie/permesso annullata</h2>
+
+    <p style="margin:0 0 8px">Ciao <strong>${esc(args.displayName)}</strong>,</p>
+    <p style="margin:0 0 16px">la tua richiesta precedentemente approvata per il periodo
+      <strong>${esc(formatIT(from))}${from !== to ? ` - ${esc(formatIT(to))}` : ""}</strong>
+      è stata <strong style="color:#92400e">annullata</strong> dall'amministratore.
+      Puoi richiedere nuovamente le ferie per questo periodo.
+    </p>
+
+    <table style="border-collapse:collapse;width:100%;max-width:600px">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:8px;border-bottom:2px solid #cbd5e1">Data</th>
+          <th style="text-align:left;padding:8px;border-bottom:2px solid #cbd5e1">Tipo assenza</th>
+          <th style="text-align:right;padding:8px;border-bottom:2px solid #cbd5e1">Durata</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+
+    ${
+      args.noteAdmin
+        ? `<div style="margin-top:16px;padding:12px;border:1px solid #fed7aa;border-radius:8px;background:#fff7ed">
+             <div style="font-weight:600;margin-bottom:6px;color:#92400e">Nota dell'amministratore</div>
+             <div>${esc(args.noteAdmin)}</div>
+           </div>`
+        : ""
+    }
+
+    <p style="margin-top:20px;color:#475569;font-size:0.875rem">
+      Per ulteriori informazioni contatta il tuo responsabile.
+    </p>
+  </div>`;
+}
+
 function buildRejectionHtml(args: {
   displayName: string;
   noteAdmin: string | null;
@@ -274,6 +335,42 @@ export async function rejectTimeOffGroup(
 }
 
 // ============================================================
+// Action: ANNULLA gruppo ferie già approvato
+// ============================================================
+export async function cancelTimeOffGroup(
+  requestGroupId: string,
+  noteAdmin: string
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Non autenticato" };
+
+  const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+    "cancel_time_off_request_group",
+    {
+      p_request_group_id: requestGroupId,
+      p_admin_user_id: user.id,
+      p_note_admin: noteAdmin.trim() || undefined,
+    }
+  );
+
+  if (rpcErr) return { ok: false, error: rpcErr.message };
+
+  const result = rpcResult as { ok?: boolean; error?: string } | null;
+  if (!result?.ok) {
+    return { ok: false, error: result?.error ?? "Errore sconosciuto dalla DB function" };
+  }
+
+  await sendApprovalMail(supabase, requestGroupId, noteAdmin, "CANCELLED");
+
+  revalidatePath("/ferie");
+  return { ok: true, message: "Richiesta annullata. Il dipendente può effettuare una nuova richiesta." };
+}
+
+// ============================================================
 // Invio mail dopo decisione
 // ============================================================
 async function sendApprovalMail(
@@ -281,7 +378,7 @@ async function sendApprovalMail(
   supabase: any,
   requestGroupId: string,
   noteAdmin: string,
-  decision: "APPROVED" | "REJECTED"
+  decision: "APPROVED" | "REJECTED" | "CANCELLED"
 ) {
   try {
     // Leggi le righe del gruppo (ora già aggiornate)
@@ -328,14 +425,19 @@ async function sendApprovalMail(
       minutes: r.minutes as number,
     }));
 
-    const isApproved = decision === "APPROVED";
-    const subject = isApproved
-      ? `Richiesta ferie approvata`
-      : `Richiesta ferie non approvata`;
+    const subject =
+      decision === "APPROVED"
+        ? "Richiesta ferie approvata"
+        : decision === "REJECTED"
+        ? "Richiesta ferie non approvata"
+        : "Richiesta ferie annullata";
 
-    const html = isApproved
-      ? buildApprovalHtml({ displayName, noteAdmin: noteAdmin || null, rows: mailRows })
-      : buildRejectionHtml({ displayName, noteAdmin: noteAdmin || null, rows: mailRows });
+    const html =
+      decision === "APPROVED"
+        ? buildApprovalHtml({ displayName, noteAdmin: noteAdmin || null, rows: mailRows })
+        : decision === "REJECTED"
+        ? buildRejectionHtml({ displayName, noteAdmin: noteAdmin || null, rows: mailRows })
+        : buildCancellationHtml({ displayName, noteAdmin: noteAdmin || null, rows: mailRows });
 
     // Best-effort: non blocca la risposta all'utente admin in caso di errore
     const mailResult = await sendMailDirect({ to: userEmail, subject, html });
